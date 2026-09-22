@@ -1,4 +1,4 @@
-Book Title,Author,Address,Latitude,Longitude,Description
+title,author,address,lat,lng,description
 Breakfast at Tiffany's,Truman Capote,"Tiffany & Co., 727 5th Ave, New York, NY",40.7589,-73.9851,The famous jewelry store that inspired the title of the novel and film.
 The Catcher in the Rye,J.D. Salinger,"Central Park, New York, NY",40.7829,-73.9654,Holden Caulfield often wanders through this iconic park.
 The Great Gatsby,F. Scott Fitzgerald,"West Egg (inspired by Great Neck, Long Island, NY)",40.8044,-73.7286,"Though fictional, West Egg is inspired by this area where Fitzgerald lived."
