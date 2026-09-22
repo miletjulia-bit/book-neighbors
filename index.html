@@ -571,7 +571,7 @@
     });
   }
 
-  // Charge locations.csv (colonnes attendues : title,author,address,lat,lng)
+  // Charge locations.csv (colonnes attendues : title,author,address,lat,lng,description)
   fetch('locations.csv')
     .then(res => {
       if (!res.ok) throw new Error('locations.csv introuvable');
