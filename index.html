@@ -584,6 +584,7 @@
           title: row.title,
           author: row.author,
           address: row.address,
+          description: row.description || '',
           lat: parseFloat(row.lat),
           lng: parseFloat(row.lng)
         }))
@@ -603,7 +604,8 @@
     const match = locations.find(l =>
       l.title.toLowerCase().includes(q) ||
       l.author.toLowerCase().includes(q) ||
-      l.address.toLowerCase().includes(q)
+      l.address.toLowerCase().includes(q) ||
+      (l.description && l.description.toLowerCase().includes(q))
     );
     if (match) map.setView([match.lat, match.lng], 9);
   });
