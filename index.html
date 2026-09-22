@@ -101,6 +101,41 @@
   .search-wrap input::placeholder { color: var(--muted); }
   .search-wrap input:focus { border-color: var(--accent); }
 
+  .search-dropdown {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 14px 32px rgba(0,0,0,0.45);
+    max-height: 320px;
+    overflow-y: auto;
+    z-index: 600;
+    display: none;
+  }
+  .search-dropdown.open { display: block; }
+  .search-dropdown .sd-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 10px 14px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border);
+  }
+  .search-dropdown .sd-item:last-child { border-bottom: none; }
+  .search-dropdown .sd-item:hover,
+  .search-dropdown .sd-item.active { background: rgba(56, 189, 248, 0.1); }
+  .search-dropdown .sd-title { font-size: 13px; font-weight: 600; color: var(--text); }
+  .search-dropdown .sd-meta { font-size: 11.5px; color: var(--muted); }
+  .search-dropdown .sd-empty {
+    padding: 14px;
+    font-size: 12.5px;
+    color: var(--muted);
+    text-align: center;
+  }
+
   .count-badge {
     display: flex;
     align-items: center;
@@ -171,37 +206,45 @@
     box-shadow: 0 0 0 5px rgba(63,199,255,0.28);
   }
 
-  /* Hover tooltip card, styled like a book entry */
+  /* Hover tooltip card, styled like a book entry — plus large que haute */
   .leaflet-tooltip.book-tooltip {
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: 12px;
     color: var(--text);
-    padding: 14px 16px;
+    padding: 14px 18px;
     box-shadow: 0 12px 28px rgba(0,0,0,0.45);
     opacity: 1;
-    max-width: 240px;
+    width: 320px;
+    max-width: min(320px, calc(100vw - 40px));
     white-space: normal;
   }
   .leaflet-tooltip.book-tooltip::before {
     border-top-color: var(--panel);
   }
+  .tt-header {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0 8px;
+    margin: 0 0 8px;
+  }
   .tt-title {
     font-size: 15px;
     font-weight: 700;
-    margin: 0 0 4px;
+    margin: 0;
     color: var(--text);
   }
   .tt-author {
-    font-size: 13px;
+    font-size: 12.5px;
     font-style: italic;
     color: var(--muted);
-    margin: 0 0 10px;
+    margin: 0;
   }
   .tt-divider {
     border: none;
     border-top: 1px solid var(--border);
-    margin: 0 0 10px;
+    margin: 0 0 8px;
   }
   .tt-address {
     display: flex;
@@ -218,6 +261,17 @@
     margin-top: 1px;
     fill: var(--pin-mini);
     stroke: var(--pin-mini);
+  }
+  .tt-description {
+    margin: 8px 0 0;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+    font-size: 12.5px;
+    color: var(--muted);
+    line-height: 1.4;
+  }
+  @media (max-width: 480px) {
+    .leaflet-tooltip.book-tooltip { width: min(280px, calc(100vw - 32px)); }
   }
 
   @media (max-width: 640px) {
@@ -408,13 +462,14 @@
       </div>
       <div class="brand-text">
         <h1>my neighbor is in a book</h1>
-        <p>Real-world addresses where fictional characters live</p>
+        <p>Real-world addresses where fictional characters live · Regional ambient radio</p>
       </div>
     </div>
 
     <div class="search-wrap">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-      <input type="text" id="searchInput" placeholder="Search by book, author, or address..." />
+      <input type="text" id="searchInput" placeholder="Search by book, author, or address..." autocomplete="off" />
+      <div class="search-dropdown" id="searchDropdown"></div>
     </div>
 
     <div class="count-badge">
@@ -548,10 +603,13 @@
 
   function addMarker(loc) {
     const tooltipHtml = `
-      <p class="tt-title">${loc.title}</p>
-      <p class="tt-author">par ${loc.author}</p>
+      <div class="tt-header">
+        <p class="tt-title">${loc.title}</p>
+        <p class="tt-author">par ${loc.author}</p>
+      </div>
       <hr class="tt-divider" />
       <div class="tt-address">${pinMiniSvg}<span>${loc.address}</span></div>
+      ${loc.description ? `<p class="tt-description">${loc.description}</p>` : ''}
     `;
     const marker = L.marker([loc.lat, loc.lng], { icon: pinIcon }).addTo(map);
     marker.bindTooltip(tooltipHtml, {
@@ -569,6 +627,7 @@
       const el = marker.getElement();
       if (el) el.querySelector('.pin')?.classList.remove('hovered');
     });
+    loc._marker = marker;
   }
 
   // Charge locations.csv (colonnes attendues : title,author,address,lat,lng,description)
@@ -598,16 +657,78 @@
       document.getElementById('countNum').textContent = 0;
     });
 
-  document.getElementById('searchInput').addEventListener('input', (e) => {
-    const q = e.target.value.trim().toLowerCase();
-    if (!q) return;
-    const match = locations.find(l =>
-      l.title.toLowerCase().includes(q) ||
-      l.author.toLowerCase().includes(q) ||
-      l.address.toLowerCase().includes(q) ||
-      (l.description && l.description.toLowerCase().includes(q))
-    );
-    if (match) map.setView([match.lat, match.lng], 9);
+  // --- Recherche avec liste déroulante ---
+  const searchInput = document.getElementById('searchInput');
+  const searchDropdown = document.getElementById('searchDropdown');
+
+  function normalize(str) {
+    return (str || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // retire les accents
+      .toLowerCase();
+  }
+
+  function searchLocations(query) {
+    const words = normalize(query).split(/\s+/).filter(Boolean);
+    if (words.length === 0) return [];
+    return locations.filter(loc => {
+      const haystack = normalize(`${loc.title} ${loc.author} ${loc.address} ${loc.description || ''}`);
+      return words.every(w => haystack.includes(w)); // tous les mots doivent matcher
+    });
+  }
+
+  function renderDropdown(results) {
+    if (results.length === 0) {
+      searchDropdown.innerHTML = `<div class="sd-empty">Aucun résultat</div>`;
+      searchDropdown.classList.add('open');
+      return;
+    }
+    searchDropdown.innerHTML = results.slice(0, 8).map((loc, i) => `
+      <div class="sd-item" data-index="${i}">
+        <span class="sd-title">${loc.title}</span>
+        <span class="sd-meta">${loc.author} · ${loc.address}</span>
+      </div>
+    `).join('');
+    searchDropdown.classList.add('open');
+
+    searchDropdown.querySelectorAll('.sd-item').forEach((el, i) => {
+      el.addEventListener('click', () => selectResult(results[i]));
+    });
+  }
+
+  function closeDropdown() {
+    searchDropdown.classList.remove('open');
+    searchDropdown.innerHTML = '';
+  }
+
+  function selectResult(loc) {
+    map.setView([loc.lat, loc.lng], 11);
+    if (loc._marker) loc._marker.openTooltip();
+    searchInput.value = loc.title;
+    closeDropdown();
+  }
+
+  let currentResults = [];
+  searchInput.addEventListener('input', (e) => {
+    const q = e.target.value.trim();
+    if (!q) { closeDropdown(); return; }
+    currentResults = searchLocations(q);
+    renderDropdown(currentResults);
+  });
+
+  searchInput.addEventListener('focus', () => {
+    if (searchInput.value.trim() && currentResults.length) renderDropdown(currentResults);
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.search-wrap')) closeDropdown();
+  });
+
+  searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeDropdown();
+    if (e.key === 'Enter' && currentResults.length) {
+      selectResult(currentResults[0]);
+    }
   });
 
   // --- Modale "Suggest a Location" ---
