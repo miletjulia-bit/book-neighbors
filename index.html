@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>My Neighbor Is In A Book</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<style>
+  :root {
+    --bg: #0c1220;
+    --panel: #101828;
+    --border: #1f2937;
+    --text: #e8ecf3;
+    --muted: #8b96a8;
+    --accent: #38bdf8;
+    --accent-dark: #0891b2;
+    --pin: #3fc7ff;
+    --pin-mini: #f43f76;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    overflow: hidden;
+  }
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 14px 22px;
+    padding-top: calc(14px + env(safe-area-inset-top, 0px));
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+    z-index: 500;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-right: 8px;
+  }
+  .brand-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    background: linear-gradient(160deg, var(--accent), var(--accent-dark));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .brand-icon svg { width: 20px; height: 20px; stroke: #071019; }
+  .brand-text h1 {
+    font-size: 15px;
+    font-weight: 700;
+    margin: 0;
+    letter-spacing: 0.01em;
+  }
+  .brand-text p {
+    font-size: 12px;
+    color: var(--muted);
+    margin: 2px 0 0;
+  }
+
+  .search-wrap {
+    flex: 1;
+    min-width: 200px;
+    position: relative;
+  }
+  .search-wrap svg {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 15px;
+    height: 15px;
+    stroke: var(--muted);
+  }
+  .search-wrap input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 9px 12px 9px 34px;
+    color: var(--text);
+    font-size: 13px;
+    outline: none;
+  }
+  .search-wrap input::placeholder { color: var(--muted); }
+  .search-wrap input:focus { border-color: var(--accent); }
+
+  .count-badge {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--text);
+    white-space: nowrap;
+    background: var(--bg);
+  }
+  .count-badge svg { width: 14px; height: 14px; stroke: var(--accent); }
+
+  .suggest-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 9px 16px;
+    border-radius: 8px;
+    border: none;
+    background: var(--accent);
+    color: #071019;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s ease;
+  }
+  .suggest-btn:hover { background: #5fd0ff; }
+  .suggest-btn svg { width: 14px; height: 14px; stroke: #071019; }
+
+  #map {
+    flex: 1;
+    background: var(--bg);
+  }
+  /* OpenStreetMap = gratuit, sans clé API. On l'inverse en CSS pour un rendu sombre. */
+  .leaflet-tile-pane {
+    filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.9);
+  }
+  /* On ré-inverse les marqueurs/popups pour qu'ils gardent leurs vraies couleurs */
+  .leaflet-marker-pane, .leaflet-popup-pane, .leaflet-tooltip-pane {
+    filter: invert(1) hue-rotate(180deg);
+  }
+
+  /* Custom pin marker (on the map) */
+  .pin {
+    width: 30px;
+    height: 30px;
+    border-radius: 50% 50% 50% 0;
+    background: var(--pin);
+    border: 2px solid #eafcff;
+    transform: rotate(-45deg);
+    box-shadow: 0 0 0 3px rgba(63,199,255,0.18);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .pin svg {
+    transform: rotate(45deg);
+    width: 13px;
+    height: 13px;
+    stroke: #071019;
+  }
+  .pin.hovered {
+    transform: rotate(-45deg) scale(1.15);
+    box-shadow: 0 0 0 5px rgba(63,199,255,0.28);
+  }
+
+  /* Hover tooltip card, styled like a book entry */
+  .leaflet-tooltip.book-tooltip {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    color: var(--text);
+    padding: 14px 16px;
+    box-shadow: 0 12px 28px rgba(0,0,0,0.45);
+    opacity: 1;
+    max-width: 240px;
+    white-space: normal;
+  }
+  .leaflet-tooltip.book-tooltip::before {
+    border-top-color: var(--panel);
+  }
+  .tt-title {
+    font-size: 15px;
+    font-weight: 700;
+    margin: 0 0 4px;
+    color: var(--text);
+  }
+  .tt-author {
+    font-size: 13px;
+    font-style: italic;
+    color: var(--muted);
+    margin: 0 0 10px;
+  }
+  .tt-divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 0 0 10px;
+  }
+  .tt-address {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text);
+    line-height: 1.35;
+  }
+  .tt-address svg {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    margin-top: 1px;
+    fill: var(--pin-mini);
+    stroke: var(--pin-mini);
+  }
+
+  @media (max-width: 640px) {
+    header { gap: 10px; }
+    .brand-text p { display: none; }
+    .count-badge span.label { display: none; }
+  }
+
+  /* Suggest-a-location modal */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(4, 8, 16, 0.65);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    z-index: 1000;
+  }
+  .modal-backdrop.open { display: flex; }
+
+  .modal {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    width: 100%;
+    max-width: 560px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+  }
+
+  .modal-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 20px 22px;
+    border-bottom: 1px solid var(--border);
+  }
+  .modal-header .modal-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    background: linear-gradient(160deg, var(--accent), var(--accent-dark));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .modal-header .modal-icon svg { width: 17px; height: 17px; stroke: #071019; }
+  .modal-header .modal-titles { flex: 1; }
+  .modal-header h2 { margin: 0; font-size: 16px; font-weight: 700; }
+  .modal-header p { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+  .modal-close {
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 6px;
+  }
+  .modal-close:hover { color: var(--text); background: rgba(255,255,255,0.06); }
+  .modal-close svg { width: 18px; height: 18px; }
+
+  .modal-body { padding: 20px 22px; }
+
+  .mod-notice {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    background: rgba(245, 158, 11, 0.08);
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 18px;
+    font-size: 12.5px;
+    color: #fbbf7a;
+    line-height: 1.4;
+  }
+  .mod-notice svg { width: 15px; height: 15px; flex-shrink: 0; margin-top: 1px; stroke: #f59e0b; }
+  .mod-notice b { color: #fcd34d; }
+
+  .field { margin-bottom: 16px; }
+  .field label {
+    display: block;
+    font-size: 12.5px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: var(--text);
+  }
+  .field input, .field textarea {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 9px 11px;
+    color: var(--text);
+    font-size: 13px;
+    font-family: inherit;
+    outline: none;
+    resize: vertical;
+  }
+  .field input::placeholder, .field textarea::placeholder { color: #5b6576; }
+  .field input:focus, .field textarea:focus { border-color: var(--accent); }
+
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 480px) { .field-row { grid-template-columns: 1fr; } }
+
+  .gps-label-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+  .gps-label-row label { margin-bottom: 0; }
+  .pin-on-map-btn {
+    background: none;
+    border: none;
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 0;
+  }
+  .pin-on-map-btn svg { width: 13px; height: 13px; stroke: var(--accent); }
+  .pin-on-map-btn.active { color: #fbbf7a; }
+  .pin-on-map-btn.active svg { stroke: #fbbf7a; }
+
+  .modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 16px 22px 20px;
+    border-top: 1px solid var(--border);
+  }
+  .btn-secondary, .btn-primary {
+    padding: 9px 18px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--border);
+  }
+  .btn-secondary { background: var(--bg); color: var(--text); }
+  .btn-secondary:hover { background: #161f30; }
+  .btn-primary { background: var(--accent); color: #071019; border: none; }
+  .btn-primary:hover { background: #5fd0ff; }
+
+  .map-picking-banner {
+    position: fixed;
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--panel);
+    border: 1px solid var(--accent);
+    color: var(--text);
+    padding: 10px 16px;
+    border-radius: 10px;
+    font-size: 13px;
+    z-index: 1100;
+    display: none;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 10px 24px rgba(0,0,0,0.4);
+  }
+  .map-picking-banner.open { display: flex; }
+  .map-picking-banner button {
+    background: var(--accent);
+    border: none;
+    color: #071019;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 5px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="brand">
+      <div class="brand-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9 21v-6h6v6"/></svg>
+      </div>
+      <div class="brand-text">
+        <h1>my neighbor is in a book</h1>
+        <p>Real-world addresses where fictional characters live · Regional ambient radio</p>
+      </div>
+    </div>
+
+    <div class="search-wrap">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input type="text" id="searchInput" placeholder="Search by book, author, or address..." />
+    </div>
+
+    <div class="count-badge">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.1-7-11a7 7 0 0 1 14 0c0 4.9-7 11-7 11Z"/><circle cx="12" cy="10" r="2.5"/></svg>
+      <span id="countLabel"><span id="countNum">0</span> <span class="label">Addresses</span></span>
+    </div>
+
+    <button class="suggest-btn" id="suggestBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+      Suggest a Location
+    </button>
+  </header>
+
+  <div id="map"></div>
+</div>
+
+<div class="map-picking-banner" id="pickingBanner">
+  <span>Clique sur la carte pour placer le point</span>
+  <button id="cancelPicking">Annuler</button>
+</div>
+
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.1-7-11a7 7 0 0 1 14 0c0 4.9-7 11-7 11Z"/><circle cx="12" cy="10" r="2.5"/></svg>
+      </div>
+      <div class="modal-titles">
+        <h2>Proposer une adresse littéraire</h2>
+        <p>my neighbor is in a book</p>
+      </div>
+      <button class="modal-close" id="modalClose">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+
+    <form id="suggestForm">
+      <div class="modal-body">
+        <div class="mod-notice">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+          <span><b>Modération :</b> votre suggestion sera sauvegardée et transmise pour relecture avant publication définitive sur la carte.</span>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>Titre du livre *</label>
+            <input type="text" id="f-title" placeholder="ex. Les Misérables" required />
+          </div>
+          <div class="field">
+            <label>Auteur *</label>
+            <input type="text" id="f-author" placeholder="ex. Victor Hugo" required />
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Adresse exacte du lieu / personnage *</label>
+          <input type="text" id="f-address" placeholder="ex. 6 Rue de la Chanvrerie" required />
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>Ville *</label>
+            <input type="text" id="f-city" placeholder="ex. Paris" required />
+          </div>
+          <div class="field">
+            <label>Pays</label>
+            <input type="text" id="f-country" placeholder="ex. France" />
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="gps-label-row">
+            <label>Coordonnées GPS</label>
+            <button type="button" class="pin-on-map-btn" id="pinOnMapBtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.1-7-11a7 7 0 0 1 14 0c0 4.9-7 11-7 11Z"/><circle cx="12" cy="10" r="2.5"/></svg>
+              Pointer sur la carte
+            </button>
+          </div>
+          <div class="field-row">
+            <input type="text" id="f-lat" placeholder="Latitude (ex. 48.8617)" />
+            <input type="text" id="f-lng" placeholder="Longitude (ex. 2.3508)" />
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Ce qui s'y passe dans le livre</label>
+          <textarea id="f-scene" rows="3" placeholder="Décrivez qui habite ici, la scène clé ou le passage marquant..."></textarea>
+        </div>
+
+        <div class="field" style="margin-bottom: 0;">
+          <label>Citation du livre (facultatif)</label>
+          <input type="text" id="f-quote" placeholder='ex. « Ouvrez une autre fenêtre... »' />
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary" id="cancelBtn">Annuler</button>
+        <button type="submit" class="btn-primary">Envoyer pour modération</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script>
+  // Les adresses sont chargées depuis locations.csv (voir plus bas)
+  let locations = [];
+
+  const map = L.map('map', {
+    zoomControl: true,
+    attributionControl: true
+  }).setView([49, 6], 4);
+
+  // OpenStreetMap standard — 100% gratuit, aucune clé API requise
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxZoom: 19
+  }).addTo(map);
+
+  const houseSvg = '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9 21v-6h6v6"/></svg>';
+  const pinMiniSvg = '<svg viewBox="0 0 24 24"><path d="M12 2C7.6 2 4 5.6 4 10c0 6 8 12 8 12s8-6 8-12c0-4.4-3.6-8-8-8Zm0 11a3 3 0 1 1 0-6 3 3 0 0 1 0 6Z"/></svg>';
+
+  const pinIcon = L.divIcon({
+    className: '',
+    html: `<div class="pin">${houseSvg}</div>`,
+    iconSize: [30, 30],
+    iconAnchor: [15, 28],
+    tooltipAnchor: [0, -26]
+  });
+
+  function addMarker(loc) {
+    const tooltipHtml = `
+      <p class="tt-title">${loc.title}</p>
+      <p class="tt-author">par ${loc.author}</p>
+      <hr class="tt-divider" />
+      <div class="tt-address">${pinMiniSvg}<span>${loc.address}</span></div>
+    `;
+    const marker = L.marker([loc.lat, loc.lng], { icon: pinIcon }).addTo(map);
+    marker.bindTooltip(tooltipHtml, {
+      direction: 'top',
+      offset: [0, -8],
+      opacity: 1,
+      className: 'book-tooltip',
+      sticky: false
+    });
+    marker.on('mouseover', () => {
+      const el = marker.getElement();
+      if (el) el.querySelector('.pin')?.classList.add('hovered');
+    });
+    marker.on('mouseout', () => {
+      const el = marker.getElement();
+      if (el) el.querySelector('.pin')?.classList.remove('hovered');
+    });
+  }
+
+  // Charge locations.csv (colonnes attendues : title,author,address,lat,lng)
+  fetch('locations.csv')
+    .then(res => {
+      if (!res.ok) throw new Error('locations.csv introuvable');
+      return res.text();
+    })
+    .then(csvText => {
+      const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+      locations = parsed.data
+        .map(row => ({
+          title: row.title,
+          author: row.author,
+          address: row.address,
+          lat: parseFloat(row.lat),
+          lng: parseFloat(row.lng)
+        }))
+        .filter(l => l.title && !isNaN(l.lat) && !isNaN(l.lng));
+
+      locations.forEach(addMarker);
+      document.getElementById('countNum').textContent = locations.length;
+    })
+    .catch(err => {
+      console.warn('Impossible de charger locations.csv :', err);
+      document.getElementById('countNum').textContent = 0;
+    });
+
+  document.getElementById('searchInput').addEventListener('input', (e) => {
+    const q = e.target.value.trim().toLowerCase();
+    if (!q) return;
+    const match = locations.find(l =>
+      l.title.toLowerCase().includes(q) ||
+      l.author.toLowerCase().includes(q) ||
+      l.address.toLowerCase().includes(q)
+    );
+    if (match) map.setView([match.lat, match.lng], 9);
+  });
+
+  // --- Modale "Suggest a Location" ---
+  const modalBackdrop = document.getElementById('modalBackdrop');
+  const suggestForm = document.getElementById('suggestForm');
+  const pickingBanner = document.getElementById('pickingBanner');
+  const pinOnMapBtn = document.getElementById('pinOnMapBtn');
+  let isPicking = false;
+
+  function openModal() { modalBackdrop.classList.add('open'); }
+  function closeModal() {
+    modalBackdrop.classList.remove('open');
+    stopPicking();
+  }
+
+  document.getElementById('suggestBtn').addEventListener('click', openModal);
+  document.getElementById('modalClose').addEventListener('click', closeModal);
+  document.getElementById('cancelBtn').addEventListener('click', closeModal);
+  modalBackdrop.addEventListener('click', (e) => {
+    if (e.target === modalBackdrop) closeModal();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && modalBackdrop.classList.contains('open')) closeModal();
+  });
+
+  // Mode "Pointer sur la carte" : on masque la modale, on écoute un clic sur la carte
+  function startPicking() {
+    isPicking = true;
+    modalBackdrop.classList.remove('open');
+    pickingBanner.classList.add('open');
+    pinOnMapBtn.classList.add('active');
+    map.getContainer().style.cursor = 'crosshair';
+  }
+  function stopPicking() {
+    isPicking = false;
+    pickingBanner.classList.remove('open');
+    pinOnMapBtn.classList.remove('active');
+    map.getContainer().style.cursor = '';
+  }
+
+  pinOnMapBtn.addEventListener('click', startPicking);
+  document.getElementById('cancelPicking').addEventListener('click', () => {
+    stopPicking();
+    openModal();
+  });
+
+  map.on('click', (e) => {
+    if (!isPicking) return;
+    document.getElementById('f-lat').value = e.latlng.lat.toFixed(5);
+    document.getElementById('f-lng').value = e.latlng.lng.toFixed(5);
+    stopPicking();
+    openModal();
+  });
+
+  // Soumission : envoi direct par email via Formspree (aucun backend nécessaire)
+  // 1. Crée un compte gratuit sur https://formspree.io
+  // 2. Crée un formulaire, associe l'adresse email de destination
+  // 3. Remplace FORMSPREE_ENDPOINT ci-dessous par l'URL fournie (ex: https://formspree.io/f/abcdwxyz)
+  const FORMSPREE_ENDPOINT = 'https://formspree.io/f/REMPLACE_MOI';
+
+  suggestForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const suggestion = {
+      title: document.getElementById('f-title').value.trim(),
+      author: document.getElementById('f-author').value.trim(),
+      address: document.getElementById('f-address').value.trim(),
+      city: document.getElementById('f-city').value.trim(),
+      country: document.getElementById('f-country').value.trim(),
+      lat: document.getElementById('f-lat').value.trim(),
+      lng: document.getElementById('f-lng').value.trim(),
+      scene: document.getElementById('f-scene').value.trim(),
+      quote: document.getElementById('f-quote').value.trim()
+    };
+
+    if (!suggestion.title || !suggestion.author || !suggestion.address || !suggestion.city) {
+      alert('Merci de remplir les champs obligatoires (*)');
+      return;
+    }
+
+    const submitBtn = suggestForm.querySelector('.btn-primary');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Envoi...';
+
+    try {
+      const res = await fetch(FORMSPREE_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify(suggestion)
+      });
+
+      if (res.ok) {
+        alert('Merci ! Ta suggestion a été envoyée et sera relue avant publication.');
+        suggestForm.reset();
+        closeModal();
+      } else {
+        throw new Error('Erreur Formspree');
+      }
+    } catch (err) {
+      console.error(err);
+      alert("L'envoi a échoué. Vérifie ta connexion ou réessaie plus tard.");
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Envoyer pour modération';
+    }
+  });
+</script>
+</body>
+</html>
